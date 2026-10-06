@@ -1,6 +1,9 @@
 package com.nepopay.account;
 
+import com.nepopay.common.ErrorCode;
+import com.nepopay.common.NepOpayException;
 import com.nepopay.user.User;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,5 +31,11 @@ public class AccountService {
             }
         }
         throw new IllegalStateException("Could not generate a unique account number");
+    }
+
+    @Transactional(readOnly = true)
+    public Account getUserAccount(UUID userId) {
+        return accounts.findByUserIdAndAccountType(userId, AccountType.USER)
+                .orElseThrow(() -> new NepOpayException(ErrorCode.USER_NOT_FOUND, "Account not found."));
     }
 }

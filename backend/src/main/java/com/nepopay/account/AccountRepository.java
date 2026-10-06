@@ -14,6 +14,8 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
 
     Optional<Account> findByAccountType(AccountType type);
 
+    Optional<Account> findByUserIdAndAccountType(UUID userId, AccountType type);
+
     /** SELECT ... FOR UPDATE: other transactions wanting this row wait until we commit or roll back. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from Account a where a.id = :id")
