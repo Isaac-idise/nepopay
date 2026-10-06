@@ -15,6 +15,8 @@ spring:
     enabled: true
 
 server:
+  # Set FORWARD_HEADERS=native when running behind a trusted proxy (Render, Railway, Nginx) so client IPs are real.
+  forward-headers-strategy: ${FORWARD_HEADERS:none}
   error:
     include-stacktrace: never
     include-message: never
@@ -44,3 +46,13 @@ nepopay:
   pin:
     max-failed-attempts: 3
     lock-minutes: 15
+  rate-limit:
+    enabled: true
+    login-ip-per-minute: 30
+    login-account-per-window: 10      # per account, per 15 minutes
+    register-per-hour: 30
+    refresh-per-minute: 30
+    search-per-minute: 30
+    transfer-per-minute: 10
+    pin-change-per-window: 5          # per 15 minutes
+    reset-per-hour: 5

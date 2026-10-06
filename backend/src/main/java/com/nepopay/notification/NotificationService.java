@@ -48,4 +48,9 @@ public class NotificationService {
     public int markAllRead(UUID userId) {
         return repository.markAllRead(userId);
     }
+
+    @Transactional
+    public int deleteAll(UUID userId) {
+        return repository.deleteAllForUser(userId);
+    }
 }

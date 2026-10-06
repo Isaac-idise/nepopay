@@ -13,18 +13,20 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
 
     Optional<Transaction> findByReference(String reference);
 
+    /** `since` is the account's history-reset marker (Instant.EPOCH when it never reset). */
     @Query(value = """
             select t from Transaction t
             join fetch t.sender s left join fetch s.user
             join fetch t.receiver r left join fetch r.user
-            where (s.id = :accountId or r.id = :accountId) and t.archived = false
+            where (s.id = :accountId or r.id = :accountId) and t.archived = false and t.createdAt >= :since
             order by t.createdAt desc, t.id desc
             """,
             countQuery = """
             select count(t) from Transaction t
-            where (t.sender.id = :accountId or t.receiver.id = :accountId) and t.archived = false
+            where (t.sender.id = :accountId or t.receiver.id = :accountId)
+              and t.archived = false and t.createdAt >= :since
             """)
-    Page<Transaction> findHistory(@Param("accountId") UUID accountId, Pageable pageable);
+    Page<Transaction> findHistory(@Param("accountId") UUID accountId, @Param("since") Instant since, Pageable pageable);
 
     @Query("""
             select coalesce(sum(t.amountKobo), 0) from Transaction t

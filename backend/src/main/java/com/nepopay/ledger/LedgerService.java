@@ -13,6 +13,7 @@ import com.nepopay.transaction.TransactionType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
@@ -60,7 +61,33 @@ public class LedgerService {
                     "Insufficient balance. Your available balance is "
                             + Money.ofKobo(sender.getBalanceKobo()) + ".");
         }
+        return record(sender, receiver, amount, type, description);
+    }
 
+    /**
+     * Moves a user account to exactly `target`, against a system account. The difference is worked out
+     * INSIDE the lock, so a transfer arriving at the same moment cannot make it wrong.
+     * Returns empty when the balance is already the target.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Transaction> adjustBalanceTo(UUID userAccountId, UUID systemAccountId, Money target,
+                                                 TransactionType type, String description) {
+        Map<UUID, Account> locked = lockInOrder(userAccountId, systemAccountId);
+        Account user = locked.get(userAccountId);
+        Account system = locked.get(systemAccountId);
+
+        long current = user.getBalanceKobo();
+        if (current == target.kobo()) {
+            return Optional.empty();
+        }
+        if (current < target.kobo()) {
+            return Optional.of(record(system, user, Money.ofKobo(target.kobo() - current), type, description));
+        }
+        return Optional.of(record(user, system, Money.ofKobo(current - target.kobo()), type, description));
+    }
+
+    private Transaction record(Account sender, Account receiver, Money amount,
+                               TransactionType type, String description) {
         sender.debit(amount.kobo());
         receiver.credit(amount.kobo());
 

@@ -3,9 +3,11 @@ package com.nepopay.auth;
 import com.nepopay.audit.AuditService;
 import com.nepopay.common.ErrorCode;
 import com.nepopay.common.NepOpayException;
+import com.nepopay.ratelimit.RateLimitService;
 import com.nepopay.user.User;
 import com.nepopay.user.UserRepository;
 import com.nepopay.user.UserStatus;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,24 +25,28 @@ public class AuthService {
     private final TokenService tokens;
     private final SessionService sessions;
     private final AuditService audit;
+    private final RateLimitService rateLimits;
     private final String dummyHash;
 
     public AuthService(UserRepository users, PasswordEncoder encoder, TokenService tokens,
-                       SessionService sessions, AuditService audit) {
+                       SessionService sessions, AuditService audit, RateLimitService rateLimits) {
         this.users = users;
         this.encoder = encoder;
         this.tokens = tokens;
         this.sessions = sessions;
         this.audit = audit;
+        this.rateLimits = rateLimits;
         this.dummyHash = encoder.encode("not-a-real-password");
     }
 
-    /**
-     * noRollbackFor: a failed login throws, but its audit record must still be saved.
-     */
+    /** noRollbackFor: a failed login throws, but its audit record must still be saved. */
     @Transactional(noRollbackFor = NepOpayException.class)
     public AuthResult login(LoginRequest req, String userAgent) {
         String id = req.identifier().trim();
+
+        // Per-ACCOUNT limit: stops one account being guessed at from many different addresses.
+        rateLimits.consumeOrThrow(RateLimitService.Rule.LOGIN_ACCOUNT, id.toLowerCase(Locale.ROOT));
+
         Optional<User> found = id.contains("@")
                 ? users.findByEmailIgnoreCase(id)
                 : users.findByUsernameIgnoreCase(id);

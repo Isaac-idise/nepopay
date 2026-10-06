@@ -7,6 +7,7 @@ import com.nepopay.common.Money;
 import com.nepopay.ledger.LedgerService;
 import com.nepopay.transaction.Transaction;
 import com.nepopay.transaction.TransactionType;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -33,9 +34,11 @@ public class DemoFundingService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public Transaction creditWelcomeFunds(Account userAccount) {
-        Account funding = accounts.findByAccountType(AccountType.SYSTEM_FUNDING)
+        // ID ONLY. Loading the funding Account entity here would cache its balance BEFORE the ledger locks
+        // the row; with several signups at once that cached balance is stale and the update fails.
+        UUID fundingId = accounts.findIdByAccountType(AccountType.SYSTEM_FUNDING)
                 .orElseThrow(() -> new IllegalStateException("SYSTEM_FUNDING account is missing"));
-        return ledger.post(funding.getId(), userAccount.getId(), welcomeCredit,
+        return ledger.post(fundingId, userAccount.getId(), welcomeCredit,
                 TransactionType.DEMO_WELCOME_CREDIT, "Demo welcome credit");
     }
 }

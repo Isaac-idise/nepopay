@@ -1,5 +1,8 @@
 package com.nepopay.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nepopay.ratelimit.RateLimitFilter;
+import com.nepopay.ratelimit.RateLimitService;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -24,7 +27,12 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
+import org.springframework.security.web.util.matcher.RegexRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -53,7 +61,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JsonSecurityHandlers handlers) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, JsonSecurityHandlers handlers,
+                                           RateLimitService rateLimits, ObjectMapper mapper) throws Exception {
         JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
         authorities.setAuthoritiesClaimName("role");
         authorities.setAuthorityPrefix("ROLE_");
@@ -66,6 +75,16 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .headers(h -> h
+                        .referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+                        .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31_536_000))
+                        .addHeaderWriter(new StaticHeadersWriter("Permissions-Policy",
+                                "geolocation=(), camera=(), microphone=()"))
+                        // JSON API responses never need to load scripts, styles or frames. Swagger UI lives outside /api/.
+                        .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
+                                new RegexRequestMatcher("^/api/.*", null),
+                                new StaticHeadersWriter("Content-Security-Policy",
+                                        "default-src 'none'; frame-ancestors 'none'"))))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login",
@@ -80,7 +99,8 @@ public class SecurityConfig {
                         .accessDeniedHandler(handlers))
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(handlers)
-                        .accessDeniedHandler(handlers));
+                        .accessDeniedHandler(handlers))
+                .addFilterAfter(new RateLimitFilter(rateLimits, mapper), BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 

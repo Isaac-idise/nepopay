@@ -10,6 +10,7 @@ import com.nepopay.transaction.TransactionDtos.EntryView;
 import com.nepopay.transaction.TransactionDtos.Party;
 import com.nepopay.transaction.TransactionDtos.TransactionDetail;
 import com.nepopay.transaction.TransactionDtos.TransactionView;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -33,23 +34,29 @@ public class TransactionService {
 
     @Transactional(readOnly = true)
     public Page<TransactionView> history(UUID userId, Pageable pageable) {
-        UUID mine = accounts.getUserAccount(userId).getId();
-        return transactions.findHistory(mine, pageable).map(t -> view(t, mine));
+        Account mine = accounts.getUserAccount(userId);
+        return transactions.findHistory(mine.getId(), visibleSince(mine), pageable).map(t -> view(t, mine.getId()));
     }
 
     @Transactional(readOnly = true)
     public TransactionDetail detail(UUID userId, String reference) {
-        UUID mine = accounts.getUserAccount(userId).getId();
-        // Someone else's transaction looks exactly like a missing one: existence is not revealed.
+        Account mine = accounts.getUserAccount(userId);
+        Instant since = visibleSince(mine);
+        // Someone else's (or a hidden, pre-reset) transaction looks exactly like a missing one.
         Transaction t = transactions.findByReference(reference)
-                .filter(x -> x.getSender().getId().equals(mine) || x.getReceiver().getId().equals(mine))
+                .filter(x -> x.getSender().getId().equals(mine.getId()) || x.getReceiver().getId().equals(mine.getId()))
+                .filter(x -> !x.getCreatedAt().isBefore(since))
                 .orElseThrow(() -> new NepOpayException(ErrorCode.NOT_FOUND, "Transaction not found."));
 
-        TransactionView v = view(t, mine);
-        List<EntryView> ledger = entries.findByTransactionIdAndAccountIdOrderByIdAsc(t.getId(), mine).stream()
+        TransactionView v = view(t, mine.getId());
+        List<EntryView> ledger = entries.findByTransactionIdAndAccountIdOrderByIdAsc(t.getId(), mine.getId()).stream()
                 .map(TransactionService::entryView).toList();
         return new TransactionDetail(v.reference(), v.type(), v.status(), v.direction(), v.amountKobo(),
                 v.counterparty(), v.description(), v.createdAt(), ledger);
+    }
+
+    private static Instant visibleSince(Account a) {
+        return a.getHistoryResetAt() == null ? Instant.EPOCH : a.getHistoryResetAt();
     }
 
     private static TransactionView view(Transaction t, UUID mine) {

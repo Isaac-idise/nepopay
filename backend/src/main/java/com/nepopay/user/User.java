@@ -89,6 +89,11 @@ public class User {
         return pinFailedAttempts;
     }
 
+    public void changePinHash(String newPinHash) {
+        this.pinHash = newPinHash;
+        resetPinFailures();
+    }
+
     public void resetPinFailures() {
         pinFailedAttempts = 0;
         pinLockedUntil = null;

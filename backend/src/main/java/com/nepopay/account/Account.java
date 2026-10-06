@@ -40,6 +40,10 @@ public class Account {
     @Column(nullable = false)
     private Instant updatedAt;
 
+    /** Transactions older than this are hidden from THIS account's history (set by the demo reset). */
+    @Column(name = "history_reset_at")
+    private Instant historyResetAt;
+
     protected Account() {
     }
 
@@ -72,6 +76,8 @@ public class Account {
         balanceKobo = Math.addExact(balanceKobo, kobo);
     }
 
+    public void markHistoryReset(Instant at) { this.historyResetAt = at; }
+    public Instant getHistoryResetAt() { return historyResetAt; }
     public UUID getId() { return id; }
     public User getUser() { return user; }
     public String getAccountNumber() { return accountNumber; }

@@ -6,10 +6,13 @@ import com.nepopay.common.ErrorCode;
 import com.nepopay.common.NepOpayException;
 import com.nepopay.common.PageResponse;
 import com.nepopay.common.Paging;
+import jakarta.validation.Valid;
 import java.time.Instant;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,10 +27,12 @@ public class UserController {
 
     private final UserRepository users;
     private final UserSearchService search;
+    private final PinService pins;
 
-    public UserController(UserRepository users, UserSearchService search) {
+    public UserController(UserRepository users, UserSearchService search, PinService pins) {
         this.users = users;
         this.search = search;
+        this.pins = pins;
     }
 
     @GetMapping("/me")
@@ -45,5 +50,11 @@ public class UserController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ApiResponse.ok(PageResponse.of(search.search(CurrentUser.id(jwt), q, Paging.of(page, size))));
+    }
+
+    @PatchMapping("/me/pin")
+    public ApiResponse<Void> changePin(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePinRequest request) {
+        pins.change(CurrentUser.id(jwt), request.currentPin(), request.newPin());
+        return ApiResponse.<Void>ok(null);
     }
 }

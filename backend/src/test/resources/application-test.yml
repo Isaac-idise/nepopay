@@ -1,0 +1,5 @@
+# Integration tests register dozens of users from one address, so global rate limits are off by default.
+# RateLimitIT switches them on with its own small limits.
+nepopay:
+  rate-limit:
+    enabled: false

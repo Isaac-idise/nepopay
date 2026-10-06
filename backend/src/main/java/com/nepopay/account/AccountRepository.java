@@ -14,6 +14,10 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
 
     Optional<Account> findByAccountType(AccountType type);
 
+    /** Scalar lookup (no entity loaded), for code that will lock the row through the ledger. */
+    @Query("select a.id from Account a where a.accountType = :type")
+    Optional<UUID> findIdByAccountType(@Param("type") AccountType type);
+
     Optional<Account> findByUserIdAndAccountType(UUID userId, AccountType type);
 
     /** Scalar projection: does NOT load the Account entity, so a later FOR UPDATE read is always fresh. */
