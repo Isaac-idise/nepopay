@@ -10,6 +10,8 @@ public enum ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Invalid username or password."),
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "This account is suspended."),
     SESSION_EXPIRED(HttpStatus.UNAUTHORIZED, "Your session has expired. Please log in again."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "Not found."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "That method is not allowed here."),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found."),
     USERNAME_TAKEN(HttpStatus.CONFLICT, "That username is not available."),
     EMAIL_TAKEN(HttpStatus.CONFLICT, "That email is already registered."),

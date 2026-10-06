@@ -44,6 +44,8 @@ public class Notification {
         this.createdAt = Instant.now();
     }
 
+    public void markRead() { this.read = true; }
+    public Instant getCreatedAt() { return createdAt; }
     public UUID getId() { return id; }
     public String getTitle() { return title; }
     public String getMessage() { return message; }

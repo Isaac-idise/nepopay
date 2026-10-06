@@ -54,4 +54,5 @@ public class LedgerEntry {
     public EntryType getEntryType() { return entryType; }
     public long getAmountKobo() { return amountKobo; }
     public long getBalanceAfterKobo() { return balanceAfterKobo; }
+    public Instant getCreatedAt() { return createdAt; }
 }

@@ -86,4 +86,5 @@ public class Transaction {
     public TransactionType getType() { return type; }
     public TransactionStatus getStatus() { return status; }
     public String getDescription() { return description; }
+    public Instant getCreatedAt() { return createdAt; }
 }

@@ -16,6 +16,11 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
 
     Optional<Account> findByUserIdAndAccountType(UUID userId, AccountType type);
 
+    /** Scalar projection: does NOT load the Account entity, so a later FOR UPDATE read is always fresh. */
+    @Query("select new com.nepopay.account.AccountRef(a.id, a.status) from Account a "
+            + "where a.user.id = :userId and a.accountType = com.nepopay.account.AccountType.USER")
+    Optional<AccountRef> findUserAccountRef(@Param("userId") UUID userId);
+
     /** SELECT ... FOR UPDATE: other transactions wanting this row wait until we commit or roll back. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from Account a where a.id = :id")

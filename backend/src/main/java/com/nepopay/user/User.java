@@ -68,6 +68,32 @@ public class User {
         return u;
     }
 
+    public boolean isPinLocked(Instant now) {
+        return pinLockedUntil != null && pinLockedUntil.isAfter(now);
+    }
+
+    /** After a lock has expired the slate is wiped clean. */
+    public void clearExpiredPinLock(Instant now) {
+        if (pinLockedUntil != null && !pinLockedUntil.isAfter(now)) {
+            pinLockedUntil = null;
+            pinFailedAttempts = 0;
+        }
+    }
+
+    /** Returns the number of consecutive failures; locks the PIN when maxAttempts is reached. */
+    public int recordPinFailure(int maxAttempts, Instant lockUntil) {
+        pinFailedAttempts++;
+        if (pinFailedAttempts >= maxAttempts) {
+            pinLockedUntil = lockUntil;
+        }
+        return pinFailedAttempts;
+    }
+
+    public void resetPinFailures() {
+        pinFailedAttempts = 0;
+        pinLockedUntil = null;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();

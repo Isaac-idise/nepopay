@@ -37,3 +37,10 @@ nepopay:
     cookie-same-site: ${COOKIE_SAME_SITE:Lax}  # "None" if frontend and API are on different sites
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173}
+  limits:
+    min-transfer-kobo: 100            # N1
+    per-transfer-kobo: 50000000       # N500,000
+    daily-kobo: 100000000             # N1,000,000 per sender per day (Africa/Lagos)
+  pin:
+    max-failed-attempts: 3
+    lock-minutes: 15
