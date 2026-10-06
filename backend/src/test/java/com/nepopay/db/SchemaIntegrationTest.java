@@ -3,25 +3,15 @@ package com.nepopay.db;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.nepopay.AbstractIntegrationTest;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /** Proves the database itself enforces our financial rules, using a real PostgreSQL (needs Docker). */
-@SpringBootTest
-@Testcontainers
-class SchemaIntegrationTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+class SchemaIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
@@ -86,7 +76,7 @@ class SchemaIntegrationTest {
         UUID tx = jdbc.queryForObject("""
                 INSERT INTO transactions (reference, sender_account_id, receiver_account_id, amount_kobo, type, status)
                 VALUES (?, ?, ?, 10000000, 'DEMO_WELCOME_CREDIT', 'SUCCESSFUL') RETURNING id
-                   """, UUID.class, "NPY-T-" + UUID.randomUUID().toString().substring(0, 8), funding, acc);
+                """, UUID.class, "NPY-T-" + UUID.randomUUID().toString().substring(0, 8), funding, acc);
         Long entryId = jdbc.queryForObject("""
                 INSERT INTO ledger_entries (transaction_id, account_id, entry_type, amount_kobo, balance_after_kobo)
                 VALUES (?, ?, 'CREDIT', 10000000, 10000000) RETURNING id
