@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: nepopay-db
+    environment:
+      POSTGRES_DB: nepopay
+      POSTGRES_USER: nepopay
+      POSTGRES_PASSWORD: change_me_locally
+    ports:
+      - "5432:5432"
+    volumes:
+      - nepopay-data:/var/lib/postgresql/data
+volumes:
+  nepopay-data:
