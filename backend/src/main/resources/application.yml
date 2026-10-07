@@ -66,3 +66,8 @@ nepopay:
     new-account-minutes: 10
     new-account-min-kobo: 2000000      # N20,000
     pin-failure-window-minutes: 30
+  admin:
+    # An admin account is created at startup ONLY when ADMIN_EMAIL is set. It is never created by public registration.
+    username: ${ADMIN_USERNAME:admin}
+    email: ${ADMIN_EMAIL:}
+    initial-password: ${ADMIN_INITIAL_PASSWORD:}

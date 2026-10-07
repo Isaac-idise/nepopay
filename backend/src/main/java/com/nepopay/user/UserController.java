@@ -28,11 +28,13 @@ public class UserController {
     private final UserRepository users;
     private final UserSearchService search;
     private final PinService pins;
+    private final PasswordService passwords;
 
-    public UserController(UserRepository users, UserSearchService search, PinService pins) {
+    public UserController(UserRepository users, UserSearchService search, PinService pins, PasswordService passwords) {
         this.users = users;
         this.search = search;
         this.pins = pins;
+        this.passwords = passwords;
     }
 
     @GetMapping("/me")
@@ -55,6 +57,13 @@ public class UserController {
     @PatchMapping("/me/pin")
     public ApiResponse<Void> changePin(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePinRequest request) {
         pins.change(CurrentUser.id(jwt), request.currentPin(), request.newPin());
+        return ApiResponse.<Void>ok(null);
+    }
+
+    @PatchMapping("/me/password")
+    public ApiResponse<Void> changePassword(@AuthenticationPrincipal Jwt jwt,
+                                            @Valid @RequestBody ChangePasswordRequest request) {
+        passwords.change(CurrentUser.id(jwt), request.currentPassword(), request.newPassword());
         return ApiResponse.<Void>ok(null);
     }
 }

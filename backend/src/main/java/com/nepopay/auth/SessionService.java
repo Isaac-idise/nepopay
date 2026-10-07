@@ -82,6 +82,12 @@ public class SessionService {
         sessions.revokeFamily(familyId, Instant.now());
     }
 
+    /** Used on password change and when an admin suspends someone: every refresh token dies. */
+    @Transactional
+    public void revokeAllForUser(UUID userId) {
+        sessions.revokeAllForUser(userId, Instant.now());
+    }
+
     static String sha256(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));

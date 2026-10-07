@@ -19,6 +19,7 @@ public enum ErrorCode {
     EMAIL_TAKEN(HttpStatus.CONFLICT, "That email is already registered."),
     PHONE_TAKEN(HttpStatus.CONFLICT, "That phone number is already registered."),
     USER_ALREADY_EXISTS(HttpStatus.CONFLICT, "Those details are already registered."),
+    INVALID_PASSWORD(HttpStatus.UNPROCESSABLE_ENTITY, "Current password is incorrect."),
     INSUFFICIENT_BALANCE(HttpStatus.UNPROCESSABLE_ENTITY, "Insufficient balance."),
     INVALID_PIN(HttpStatus.UNPROCESSABLE_ENTITY, "Invalid transaction PIN."),
     PIN_LOCKED(HttpStatus.LOCKED, "Transactions are temporarily locked."),

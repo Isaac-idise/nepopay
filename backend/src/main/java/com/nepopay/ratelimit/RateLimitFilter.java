@@ -32,6 +32,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Route("GET", "/api/v1/users/search", Rule.SEARCH_USER, true),
             new Route("POST", "/api/v1/transfers", Rule.TRANSFER_USER, true),
             new Route("PATCH", "/api/v1/users/me/pin", Rule.PIN_CHANGE_USER, true),
+            new Route("PATCH", "/api/v1/users/me/password", Rule.PIN_CHANGE_USER, true),
             new Route("POST", "/api/v1/demo/reset", Rule.RESET_USER, true));
 
     private final RateLimitService limits;

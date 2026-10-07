@@ -99,6 +99,22 @@ public class User {
         pinLockedUntil = null;
     }
 
+    /** Admins are never created through public registration; only the startup seeder uses this. */
+    public static User newAdmin(String username, String firstName, String lastName, String email,
+                                String phone, String passwordHash, String pinHash) {
+        User u = newCustomer(username, firstName, lastName, email, phone, passwordHash, pinHash);
+        u.role = UserRole.ADMIN;
+        return u;
+    }
+
+    public void changePasswordHash(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+    }
+
+    public void changeStatus(UserStatus newStatus) {
+        this.status = newStatus;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();

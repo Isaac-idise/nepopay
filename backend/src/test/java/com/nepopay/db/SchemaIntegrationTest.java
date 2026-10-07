@@ -51,9 +51,9 @@ class SchemaIntegrationTest extends AbstractIntegrationTest {
     @Test
     void fundingAccountMayGoNegative() {
         UUID funding = systemAccount("SYSTEM_FUNDING");
-        int rows = jdbc.update("UPDATE accounts SET balance_kobo = -10000000 WHERE id = ?", funding);
+        int rows = jdbc.update("UPDATE accounts SET balance_kobo = balance_kobo - 1000000000000 WHERE id = ?", funding);
         assertThat(rows).isEqualTo(1);
-        jdbc.update("UPDATE accounts SET balance_kobo = 0 WHERE id = ?", funding);
+        jdbc.update("UPDATE accounts SET balance_kobo = balance_kobo + 1000000000000 WHERE id = ?", funding);
     }
 
     @Test
@@ -77,6 +77,13 @@ class SchemaIntegrationTest extends AbstractIntegrationTest {
                 INSERT INTO transactions (reference, sender_account_id, receiver_account_id, amount_kobo, type, status)
                 VALUES (?, ?, ?, 10000000, 'DEMO_WELCOME_CREDIT', 'SUCCESSFUL') RETURNING id
                 """, UUID.class, "NPY-T-" + UUID.randomUUID().toString().substring(0, 8), funding, acc);
+        // keep the books balanced (both entries AND both cached balances) so other tests that audit the ledger stay valid
+        jdbc.update("UPDATE accounts SET balance_kobo = balance_kobo - 10000000 WHERE id = ?", funding);
+        jdbc.update("UPDATE accounts SET balance_kobo = balance_kobo + 10000000 WHERE id = ?", acc);
+        Long fundingBalance = jdbc.queryForObject("SELECT balance_kobo FROM accounts WHERE id = ?", Long.class, funding);
+        jdbc.update("""
+                INSERT INTO ledger_entries (transaction_id, account_id, entry_type, amount_kobo, balance_after_kobo)
+                VALUES (?, ?, 'DEBIT', 10000000, ?)""", tx, funding, fundingBalance);
         Long entryId = jdbc.queryForObject("""
                 INSERT INTO ledger_entries (transaction_id, account_id, entry_type, amount_kobo, balance_after_kobo)
                 VALUES (?, ?, 'CREDIT', 10000000, 10000000) RETURNING id

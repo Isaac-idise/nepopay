@@ -37,7 +37,7 @@ public class UserSearchService {
      * In SQL LIKE, '_' means "any one character" and '%' means "anything". Usernames can contain '_',
      * so the user's text must be escaped, otherwise searching "a_" would also match "ab...".
      */
-    static String escapeLike(String s) {
+    public static String escapeLike(String s) {
         return s.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 }

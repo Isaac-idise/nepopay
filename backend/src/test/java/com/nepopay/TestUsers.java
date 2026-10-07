@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -52,6 +53,13 @@ public final class TestUsers {
                 .andExpect(status().isOk()).andReturn();
         String token = JsonPath.read(login.getResponse().getContentAsString(), "$.data.accessToken");
         return new TestUser(username, token);
+    }
+
+    /** Registers a normal user, promotes it to ADMIN in the database, and logs in again so the token carries the role. */
+    public TestUser admin(JdbcTemplate jdbc) throws Exception {
+        TestUser u = register();
+        jdbc.update("UPDATE users SET role = 'ADMIN' WHERE username = ?", u.username());
+        return login(u.username());
     }
 
     /** Sends money with PIN 1234 and returns the transaction reference. */

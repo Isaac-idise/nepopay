@@ -47,4 +47,28 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                 or lower(concat(u.firstName, ' ', u.lastName)) like :prefix escape '!')
             """)
     Page<UserSearchResult> search(@Param("selfId") UUID selfId, @Param("prefix") String prefix, Pageable pageable);
+
+    /** Admin list: each row is [User, Account-or-null]. Admins have no bank account, hence the LEFT JOIN. */
+    @Query(value = """
+            select u, a from User u
+            left join Account a on a.user.id = u.id and a.accountType = com.nepopay.account.AccountType.USER
+            where u.status in :statuses
+              and (lower(u.username) like :pattern escape '!'
+                or lower(u.email) like :pattern escape '!'
+                or lower(u.firstName) like :pattern escape '!'
+                or lower(u.lastName) like :pattern escape '!'
+                or lower(concat(u.firstName, ' ', u.lastName)) like :pattern escape '!')
+            order by u.createdAt desc
+            """,
+            countQuery = """
+            select count(u) from User u
+            where u.status in :statuses
+              and (lower(u.username) like :pattern escape '!'
+                or lower(u.email) like :pattern escape '!'
+                or lower(u.firstName) like :pattern escape '!'
+                or lower(u.lastName) like :pattern escape '!'
+                or lower(concat(u.firstName, ' ', u.lastName)) like :pattern escape '!')
+            """)
+    Page<Object[]> adminSearch(@Param("statuses") java.util.List<UserStatus> statuses,
+                               @Param("pattern") String pattern, Pageable pageable);
 }
