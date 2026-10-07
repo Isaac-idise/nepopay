@@ -42,6 +42,9 @@ public class Transaction {
 
     private String failureReason;
 
+    @Column(name = "related_transaction_id")
+    private UUID relatedTransactionId;
+
     @Column(nullable = false)
     private boolean archived;
 
@@ -54,17 +57,31 @@ public class Transaction {
     protected Transaction() {
     }
 
-    public static Transaction successful(String reference, Account sender, Account receiver,
-                                         long amountKobo, TransactionType type, String description) {
+    /** Every transaction starts PROCESSING and must be moved to its final status via transition(). */
+    public static Transaction start(String reference, Account sender, Account receiver,
+                                    long amountKobo, TransactionType type, String description) {
         Transaction t = new Transaction();
         t.reference = reference;
         t.sender = sender;
         t.receiver = receiver;
         t.amountKobo = amountKobo;
         t.type = type;
-        t.status = TransactionStatus.SUCCESSFUL;
+        t.status = TransactionStatus.PROCESSING;
         t.description = description;
         return t;
+    }
+
+    public void transition(TransactionStatus to) {
+        TransactionStateMachine.require(status, to);
+        this.status = to;
+    }
+
+    public void assignRisk(int score) {
+        this.riskScore = score;
+    }
+
+    public void linkTo(UUID originalTransactionId) {
+        this.relatedTransactionId = originalTransactionId;
     }
 
     @PrePersist
@@ -86,5 +103,6 @@ public class Transaction {
     public TransactionType getType() { return type; }
     public TransactionStatus getStatus() { return status; }
     public String getDescription() { return description; }
+    public int getRiskScore() { return riskScore; }
     public Instant getCreatedAt() { return createdAt; }
 }

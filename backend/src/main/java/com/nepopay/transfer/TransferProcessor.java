@@ -2,16 +2,25 @@ package com.nepopay.transfer;
 
 import com.nepopay.account.AccountRef;
 import com.nepopay.account.AccountRepository;
+import com.nepopay.account.AccountSnapshot;
 import com.nepopay.account.AccountStatus;
+import com.nepopay.account.AccountType;
 import com.nepopay.audit.AuditService;
 import com.nepopay.common.ErrorCode;
 import com.nepopay.common.Money;
 import com.nepopay.common.NepOpayException;
+import com.nepopay.fraud.FraudAlertService;
+import com.nepopay.fraud.FraudAssessment;
+import com.nepopay.fraud.FraudEngine;
+import com.nepopay.fraud.FraudProperties;
+import com.nepopay.fraud.RiskLevel;
+import com.nepopay.fraud.TransferContext;
 import com.nepopay.ledger.LedgerService;
 import com.nepopay.notification.NotificationService;
 import com.nepopay.notification.NotificationType;
 import com.nepopay.transaction.Transaction;
 import com.nepopay.transaction.TransactionRepository;
+import com.nepopay.transaction.TransactionStatus;
 import com.nepopay.transaction.TransactionType;
 import com.nepopay.user.User;
 import com.nepopay.user.UserRepository;
@@ -38,10 +47,14 @@ public class TransferProcessor {
     private final AuditService audit;
     private final IdempotencyService idempotency;
     private final TransferLimits limits;
+    private final FraudEngine fraud;
+    private final FraudAlertService fraudAlerts;
+    private final FraudProperties fraudProps;
 
     public TransferProcessor(UserRepository users, AccountRepository accounts, TransactionRepository transactions,
                              LedgerService ledger, NotificationService notifications, AuditService audit,
-                             IdempotencyService idempotency, TransferLimits limits) {
+                             IdempotencyService idempotency, TransferLimits limits, FraudEngine fraud,
+                             FraudAlertService fraudAlerts, FraudProperties fraudProps) {
         this.users = users;
         this.accounts = accounts;
         this.transactions = transactions;
@@ -50,12 +63,15 @@ public class TransferProcessor {
         this.audit = audit;
         this.idempotency = idempotency;
         this.limits = limits;
+        this.fraud = fraud;
+        this.fraudAlerts = fraudAlerts;
+        this.fraudProps = fraudProps;
     }
 
     @Transactional
     public TransferResponse execute(UUID senderUserId, TransferRequest req, String idempotencyKey) {
         // Lock the sender's user row first: one sender's transfers run one at a time, so the daily-limit
-        // check always sees every earlier committed transfer. (Account rows are locked later, by the ledger.)
+        // and fraud counters always see every earlier committed transfer.
         User sender = users.findByIdForUpdate(senderUserId)
                 .orElseThrow(() -> new NepOpayException(ErrorCode.UNAUTHORIZED));
         if (sender.getStatus() != UserStatus.ACTIVE) {
@@ -87,20 +103,43 @@ public class TransferProcessor {
         Money amount = Money.ofKobo(req.amountKobo());
         checkLimits(from.id(), amount);
 
+        // ---- risk scoring (read-only), then pay normally or park the money ----
+        FraudAssessment risk = assess(sender, recipient, from, to, amount);
+        boolean hold = risk.level().holds();
         String description = req.description() == null ? null : req.description().trim();
-        Transaction tx = ledger.post(from.id(), to.id(), amount, TransactionType.P2P_TRANSFER, description);
 
-        notifications.send(sender, NotificationType.TRANSFER_SENT, "Transfer successful",
-                "You sent " + amount + " to " + recipient.getDisplayName() + " (@" + recipient.getUsername()
-                        + "). Reference: " + tx.getReference());
-        notifications.send(recipient, NotificationType.TRANSFER_RECEIVED, "Money received",
-                "You received " + amount + " from " + sender.getDisplayName() + " (@" + sender.getUsername()
-                        + "). Reference: " + tx.getReference());
-        audit.record(sender.getId(), "TRANSFER", "TRANSACTION", tx.getReference(),
-                Map.of("amountKobo", amount.kobo(), "recipient", recipient.getUsername()));
+        Transaction tx;
+        if (hold) {
+            UUID holdId = accounts.findIdByAccountType(AccountType.SYSTEM_HOLD)
+                    .orElseThrow(() -> new IllegalStateException("SYSTEM_HOLD account is missing"));
+            tx = ledger.postHeld(from.id(), holdId, to.id(), amount, TransactionType.P2P_TRANSFER, description);
+        } else {
+            tx = ledger.post(from.id(), to.id(), amount, TransactionType.P2P_TRANSFER, description);
+        }
+        tx.assignRisk(risk.score());
+        if (risk.level() != RiskLevel.LOW) {
+            fraudAlerts.record(tx, risk, hold);
+        }
+
+        if (hold) {
+            notifications.send(sender, NotificationType.FRAUD_ALERT, "Transfer under review",
+                    "Your transfer of " + amount + " to " + recipient.getDisplayName() + " (@" + recipient.getUsername()
+                            + ") is on hold for a quick safety review. The money is reserved and will be delivered "
+                            + "or returned after review. Reference: " + tx.getReference());
+            audit.record(sender.getId(), "TRANSFER_FLAGGED", "TRANSACTION", tx.getReference(),
+                    Map.of("amountKobo", amount.kobo(), "riskScore", risk.score(), "riskLevel", risk.level().name()));
+        } else {
+            notifications.send(sender, NotificationType.TRANSFER_SENT, "Transfer successful",
+                    "You sent " + amount + " to " + recipient.getDisplayName() + " (@" + recipient.getUsername()
+                            + "). Reference: " + tx.getReference());
+            notifications.send(recipient, NotificationType.TRANSFER_RECEIVED, "Money received",
+                    "You received " + amount + " from " + sender.getDisplayName() + " (@" + sender.getUsername()
+                            + "). Reference: " + tx.getReference());
+            audit.record(sender.getId(), "TRANSFER", "TRANSACTION", tx.getReference(),
+                    Map.of("amountKobo", amount.kobo(), "recipient", recipient.getUsername()));
+        }
 
         idempotency.complete(senderUserId, idempotencyKey, tx.getReference()); // commits WITH the money
-
         return toResponse(tx, recipient, false);
     }
 
@@ -110,6 +149,16 @@ public class TransferProcessor {
         Transaction tx = transactions.findByReference(reference)
                 .orElseThrow(() -> new IllegalStateException("Transaction missing for idempotent replay"));
         return toResponse(tx, tx.getReceiver().getUser(), true);
+    }
+
+    private FraudAssessment assess(User sender, User recipient, AccountRef from, AccountRef to, Money amount) {
+        if (!fraudProps.enabled()) {
+            return FraudAssessment.none();
+        }
+        AccountSnapshot snapshot = accounts.findSnapshot(from.id())
+                .orElseThrow(() -> new IllegalStateException("Sender account missing"));
+        return fraud.assess(new TransferContext(sender.getId(), from.id(), recipient.getId(), to.id(),
+                amount, snapshot.balanceKobo(), snapshot.createdAt(), Instant.now()));
     }
 
     private void checkLimits(UUID fromAccountId, Money amount) {
@@ -134,6 +183,15 @@ public class TransferProcessor {
     private TransferResponse toResponse(Transaction tx, User recipient, boolean replay) {
         return new TransferResponse(tx.getReference(), tx.getStatus().name(), tx.getAmountKobo(),
                 recipient.getUsername(), recipient.getDisplayName(), tx.getDescription(),
-                tx.getCreatedAt(), replay);
+                tx.getCreatedAt(), replay, messageFor(tx.getStatus()));
+    }
+
+    private static String messageFor(TransactionStatus status) {
+        return switch (status) {
+            case SUCCESSFUL -> "Transfer successful.";
+            case FLAGGED -> "Your transfer is on hold for a quick safety review. The money is reserved and will be "
+                    + "delivered or returned after review.";
+            default -> null;
+        };
     }
 }

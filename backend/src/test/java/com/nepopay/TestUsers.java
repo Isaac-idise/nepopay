@@ -42,6 +42,11 @@ public final class TestUsers {
                 """.formatted(firstName, username, phone, username);
         mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated());
+        return login(username);
+    }
+
+    /** Fresh login (use after changing a user's role in the database, so the new token carries it). */
+    public TestUser login(String username) throws Exception {
         MvcResult login = mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"identifier\":\"%s\",\"password\":\"Passw0rdTest\"}".formatted(username)))
                 .andExpect(status().isOk()).andReturn();

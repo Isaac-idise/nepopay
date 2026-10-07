@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 /** Daily limit lowered to N150,000 so it can be reached with a N100,000 starting balance. */
 @AutoConfigureMockMvc
-@TestPropertySource(properties = "nepopay.limits.daily-kobo=15000000")
+@TestPropertySource(properties = {"nepopay.limits.daily-kobo=15000000", "nepopay.fraud.enabled=false"})
 class TransferLimitsIT extends AbstractIntegrationTest {
 
     @Autowired MockMvc mvc;

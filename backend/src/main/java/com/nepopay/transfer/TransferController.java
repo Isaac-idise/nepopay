@@ -23,14 +23,18 @@ public class TransferController {
         this.transfers = transfers;
     }
 
-    /** 201 = new transfer. 200 = this Idempotency-Key already succeeded; same result returned, nothing moved again. */
+    /**
+     * 201 = delivered. 202 = accepted but held for review (status FLAGGED).
+     * 200 = this Idempotency-Key already succeeded; same result returned, nothing moved again.
+     */
     @PostMapping
     public ResponseEntity<ApiResponse<TransferResponse>> transfer(
             @AuthenticationPrincipal Jwt jwt,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody TransferRequest request) {
         TransferResponse result = transfers.transfer(CurrentUser.id(jwt), request, idempotencyKey);
-        HttpStatus status = result.idempotentReplay() ? HttpStatus.OK : HttpStatus.CREATED;
+        HttpStatus status = result.idempotentReplay() ? HttpStatus.OK
+                : "FLAGGED".equals(result.status()) ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
         return ResponseEntity.status(status).body(ApiResponse.ok(result));
     }
 }

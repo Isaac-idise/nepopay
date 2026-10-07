@@ -18,6 +18,10 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     @Query("select a.id from Account a where a.accountType = :type")
     Optional<UUID> findIdByAccountType(@Param("type") AccountType type);
 
+    /** Read-only numbers for risk scoring. Scalar projection: no Account entity is loaded. */
+    @Query("select new com.nepopay.account.AccountSnapshot(a.balanceKobo, a.createdAt) from Account a where a.id = :id")
+    Optional<AccountSnapshot> findSnapshot(@Param("id") UUID id);
+
     Optional<Account> findByUserIdAndAccountType(UUID userId, AccountType type);
 
     /** Scalar projection: does NOT load the Account entity, so a later FOR UPDATE read is always fresh. */

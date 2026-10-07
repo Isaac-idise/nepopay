@@ -11,6 +11,7 @@ public enum ErrorCode {
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "This account is suspended."),
     SESSION_EXPIRED(HttpStatus.UNAUTHORIZED, "Your session has expired. Please log in again."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "Not found."),
+    ALERT_ALREADY_REVIEWED(HttpStatus.CONFLICT, "This alert has already been reviewed."),
     BENEFICIARY_EXISTS(HttpStatus.CONFLICT, "That person is already in your beneficiaries."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "That method is not allowed here."),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found."),

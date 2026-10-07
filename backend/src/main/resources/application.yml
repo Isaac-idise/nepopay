@@ -56,3 +56,13 @@ nepopay:
     transfer-per-minute: 10
     pin-change-per-window: 5          # per 15 minutes
     reset-per-hour: 5
+  fraud:
+    enabled: true
+    # Demo-friendly numbers: with N100,000 starting balances, N50,000 is already a "large" transfer.
+    high-amount-kobo: 5000000          # N50,000
+    rapid-transfer-count: 5            # this transfer would be the 5th ...
+    rapid-window-minutes: 10           # ... within 10 minutes
+    drain-min-kobo: 1000000            # N10,000 (ignore "draining" tiny balances)
+    new-account-minutes: 10
+    new-account-min-kobo: 2000000      # N20,000
+    pin-failure-window-minutes: 30

@@ -9,6 +9,8 @@ import com.nepopay.common.NepOpayException;
 import com.nepopay.transaction.Transaction;
 import com.nepopay.transaction.TransactionReferenceGenerator;
 import com.nepopay.transaction.TransactionRepository;
+import com.nepopay.transaction.TransactionStateMachine;
+import com.nepopay.transaction.TransactionStatus;
 import com.nepopay.transaction.TransactionType;
 import java.util.HashMap;
 import java.util.List;
@@ -21,9 +23,14 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * THE ONLY place money moves. One call = one balanced transaction: one DEBIT, one CREDIT,
- * both balances updated, all inside the caller's database transaction (MANDATORY propagation),
- * so the caller's later failure rolls the money movement back too.
+ * THE ONLY place money moves. Every movement is a balanced DEBIT + CREDIT inside the caller's database
+ * transaction (MANDATORY propagation), so the caller's later failure rolls the money movement back too.
+ *
+ *  post()          sender -> receiver                       (normal transfer)
+ *  postHeld()      sender -> SYSTEM_HOLD, receiver not paid (flagged transfer: money is parked)
+ *  settleHeld()    SYSTEM_HOLD -> receiver                  (admin approves)
+ *  refundHeld()    SYSTEM_HOLD -> sender, as a REVERSAL     (admin rejects)
+ *  adjustBalanceTo()  user <-> system account               (demo reset)
  */
 @Service
 public class LedgerService {
@@ -44,24 +51,74 @@ public class LedgerService {
     @Transactional(propagation = Propagation.MANDATORY)
     public Transaction post(UUID senderId, UUID receiverId, Money amount,
                             TransactionType type, String description) {
-        if (amount.isZero()) {
-            throw new IllegalArgumentException("Ledger amount must be greater than zero");
-        }
+        requirePositive(amount);
         if (senderId.equals(receiverId)) {
             throw new IllegalArgumentException("Sender and receiver must differ");
         }
-
         Map<UUID, Account> locked = lockInOrder(senderId, receiverId);
         Account sender = locked.get(senderId);
         Account receiver = locked.get(receiverId);
+        requireFunds(sender, amount);
 
-        // Checked AFTER locking, so no one can spend the same money between check and debit.
-        if (sender.getAccountType() == AccountType.USER && sender.getBalanceKobo() < amount.kobo()) {
-            throw new NepOpayException(ErrorCode.INSUFFICIENT_BALANCE,
-                    "Insufficient balance. Your available balance is "
-                            + Money.ofKobo(sender.getBalanceKobo()) + ".");
-        }
-        return record(sender, receiver, amount, type, description);
+        Transaction tx = transactions.save(Transaction.start(
+                references.next(), sender, receiver, amount.kobo(), type, description));
+        move(tx, sender, receiver, amount);
+        tx.transition(TransactionStatus.SUCCESSFUL);
+        return tx;
+    }
+
+    /**
+     * The transaction still says sender -> receiver (that is what the customer asked for), but the money
+     * only goes as far as SYSTEM_HOLD and the status is FLAGGED until a human decides.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Transaction postHeld(UUID senderId, UUID holdId, UUID receiverId, Money amount,
+                                TransactionType type, String description) {
+        requirePositive(amount);
+        Map<UUID, Account> locked = lockInOrder(senderId, holdId);
+        Account sender = locked.get(senderId);
+        Account hold = locked.get(holdId);
+        requireFunds(sender, amount);
+
+        // getReferenceById: a placeholder for the receiver, nothing is loaded or locked.
+        Transaction tx = transactions.save(Transaction.start(
+                references.next(), sender, accounts.getReferenceById(receiverId), amount.kobo(), type, description));
+        move(tx, sender, hold, amount);
+        tx.transition(TransactionStatus.FLAGGED);
+        return tx;
+    }
+
+    /** Approval: the held money continues to the receiver, as extra entries on the SAME transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void settleHeld(UUID transactionId, UUID holdId) {
+        Transaction tx = transactions.findById(transactionId).orElseThrow(() -> new IllegalStateException("Transaction missing"));
+        TransactionStateMachine.require(tx.getStatus(), TransactionStatus.SUCCESSFUL);
+        UUID receiverId = transactions.findReceiverAccountId(transactionId).orElseThrow();
+
+        Map<UUID, Account> locked = lockInOrder(holdId, receiverId);
+        move(tx, locked.get(holdId), locked.get(receiverId), Money.ofKobo(tx.getAmountKobo()));
+        tx.transition(TransactionStatus.SUCCESSFUL);
+    }
+
+    /** Rejection: a NEW REVERSAL transaction returns the money; the original is marked REVERSED. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Transaction refundHeld(UUID transactionId, UUID holdId, String description) {
+        Transaction original = transactions.findById(transactionId).orElseThrow(() -> new IllegalStateException("Transaction missing"));
+        TransactionStateMachine.require(original.getStatus(), TransactionStatus.REVERSED);
+        UUID senderId = transactions.findSenderAccountId(transactionId).orElseThrow();
+        Money amount = Money.ofKobo(original.getAmountKobo());
+
+        Map<UUID, Account> locked = lockInOrder(holdId, senderId);
+        Account hold = locked.get(holdId);
+        Account sender = locked.get(senderId);
+
+        Transaction reversal = transactions.save(Transaction.start(
+                references.next(), hold, sender, amount.kobo(), TransactionType.REVERSAL, description));
+        reversal.linkTo(original.getId());
+        move(reversal, hold, sender, amount);
+        reversal.transition(TransactionStatus.SUCCESSFUL);
+        original.transition(TransactionStatus.REVERSED);
+        return reversal;
     }
 
     /**
@@ -80,22 +137,37 @@ public class LedgerService {
         if (current == target.kobo()) {
             return Optional.empty();
         }
-        if (current < target.kobo()) {
-            return Optional.of(record(system, user, Money.ofKobo(target.kobo() - current), type, description));
-        }
-        return Optional.of(record(user, system, Money.ofKobo(current - target.kobo()), type, description));
+        Account from = current < target.kobo() ? system : user;
+        Account to = current < target.kobo() ? user : system;
+        Money diff = Money.ofKobo(Math.abs(target.kobo() - current));
+
+        Transaction tx = transactions.save(Transaction.start(references.next(), from, to, diff.kobo(), type, description));
+        move(tx, from, to, diff);
+        tx.transition(TransactionStatus.SUCCESSFUL);
+        return Optional.of(tx);
     }
 
-    private Transaction record(Account sender, Account receiver, Money amount,
-                               TransactionType type, String description) {
-        sender.debit(amount.kobo());
-        receiver.credit(amount.kobo());
+    /** One DEBIT and one CREDIT, balances updated, both entries recorded against `tx`. */
+    private void move(Transaction tx, Account from, Account to, Money amount) {
+        from.debit(amount.kobo());
+        to.credit(amount.kobo());
+        entries.save(new LedgerEntry(tx, from, EntryType.DEBIT, amount.kobo(), from.getBalanceKobo()));
+        entries.save(new LedgerEntry(tx, to, EntryType.CREDIT, amount.kobo(), to.getBalanceKobo()));
+    }
 
-        Transaction tx = transactions.save(Transaction.successful(
-                references.next(), sender, receiver, amount.kobo(), type, description));
-        entries.save(new LedgerEntry(tx, sender, EntryType.DEBIT, amount.kobo(), sender.getBalanceKobo()));
-        entries.save(new LedgerEntry(tx, receiver, EntryType.CREDIT, amount.kobo(), receiver.getBalanceKobo()));
-        return tx;
+    private static void requirePositive(Money amount) {
+        if (amount.isZero()) {
+            throw new IllegalArgumentException("Ledger amount must be greater than zero");
+        }
+    }
+
+    /** Checked AFTER locking, so no one can spend the same money between check and debit. */
+    private static void requireFunds(Account sender, Money amount) {
+        if (sender.getAccountType() == AccountType.USER && sender.getBalanceKobo() < amount.kobo()) {
+            throw new NepOpayException(ErrorCode.INSUFFICIENT_BALANCE,
+                    "Insufficient balance. Your available balance is "
+                            + Money.ofKobo(sender.getBalanceKobo()) + ".");
+        }
     }
 
     /** Always lock the "smaller" account id first. Two opposite transfers then queue up instead of deadlocking. */

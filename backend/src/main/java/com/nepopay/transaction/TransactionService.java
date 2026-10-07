@@ -44,7 +44,8 @@ public class TransactionService {
         Instant since = visibleSince(mine);
         // Someone else's (or a hidden, pre-reset) transaction looks exactly like a missing one.
         Transaction t = transactions.findByReference(reference)
-                .filter(x -> x.getSender().getId().equals(mine.getId()) || x.getReceiver().getId().equals(mine.getId()))
+                .filter(x -> x.getSender().getId().equals(mine.getId())
+                        || (x.getReceiver().getId().equals(mine.getId()) && x.getStatus() == TransactionStatus.SUCCESSFUL))
                 .filter(x -> !x.getCreatedAt().isBefore(since))
                 .orElseThrow(() -> new NepOpayException(ErrorCode.NOT_FOUND, "Transaction not found."));
 
