@@ -9,4 +9,4 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
-CMD ["java", "-Xmx400m", "-Xss256k", "-XX:+UseContainerSupport", "-jar", "app.jar"]
+CMD ["sh", "-c", "java -Xmx400m -Xss256k -XX:+UseContainerSupport -jar app.jar --server.port=$PORT"]
