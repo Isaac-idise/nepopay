@@ -5,6 +5,8 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/nepopay}
     username: ${DATABASE_USERNAME:nepopay}
     password: ${DATABASE_PASSWORD:change_me_locally}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}   # set DB_POOL_SIZE=5 on small free-tier hosts
   jpa:
     open-in-view: false
     hibernate:

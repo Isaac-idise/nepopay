@@ -17,6 +17,7 @@ import AdminFraud from './pages/admin/AdminFraud'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminTransactions from './pages/admin/AdminTransactions'
 import AdminAudit from './pages/admin/AdminAudit'
+import AdminAccount from './pages/admin/AdminAccount'
 
 function NotFound() {
   return (
@@ -59,6 +60,7 @@ export default function AppRoutes() {
           <Route path="users" element={<AdminUsers />} />
           <Route path="transactions" element={<AdminTransactions />} />
           <Route path="audit" element={<AdminAudit />} />
+          <Route path="account" element={<AdminAccount />} />
         </Route>
       </Route>
 

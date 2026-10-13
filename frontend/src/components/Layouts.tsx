@@ -121,6 +121,7 @@ export function AdminLayout() {
     { to: '/admin/users', label: 'Users' },
     { to: '/admin/transactions', label: 'Transactions' },
     { to: '/admin/audit', label: 'Audit log' },
+    { to: '/admin/account', label: 'My account' },
   ]
   return (
     <div className="min-h-screen">

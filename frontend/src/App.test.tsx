@@ -202,3 +202,30 @@ describe('send money', () => {
     expect(await screen.findByText(/nobody found/i)).toBeInTheDocument()
   })
 })
+
+describe('admin account', () => {
+  it('lets an admin change the initial password, then signs them out', async () => {
+    const ctx = setup('/admin/account', { loggedInAs: 'admin' })
+    expect(await screen.findByRole('heading', { name: /my account/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /my account/i })).toBeInTheDocument()
+
+    await ctx.user.type(screen.getByLabelText(/current password/i), 'Passw0rdTest')
+    await ctx.user.type(screen.getByLabelText(/^new password/i), 'BrandNewPass9')
+    await ctx.user.type(screen.getByLabelText(/confirm new password/i), 'BrandNewPass9')
+    await ctx.user.click(screen.getByRole('button', { name: /change password/i }))
+
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument() // signed out
+    expect(ctx.state.passwordChanges).toEqual([{ currentPassword: 'Passw0rdTest', newPassword: 'BrandNewPass9' }])
+  })
+
+  it('shows a clear message when the current password is wrong', async () => {
+    const ctx = setup('/admin/account', { loggedInAs: 'admin' })
+    await ctx.user.type(await screen.findByLabelText(/current password/i), 'not-it')
+    await ctx.user.type(screen.getByLabelText(/^new password/i), 'BrandNewPass9')
+    await ctx.user.type(screen.getByLabelText(/confirm new password/i), 'BrandNewPass9')
+    await ctx.user.click(screen.getByRole('button', { name: /change password/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/that password no correct/i)
+    expect(screen.queryByRole('heading', { name: /welcome back/i })).not.toBeInTheDocument() // still signed in
+  })
+})
+

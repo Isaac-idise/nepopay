@@ -79,7 +79,7 @@ function ChangePin() {
   )
 }
 
-function ChangePassword() {
+export function ChangePassword() {
   const toast = useToast()
   const { logout } = useAuth()
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ChangePasswordForm>({ resolver: zodResolver(changePasswordSchema) })

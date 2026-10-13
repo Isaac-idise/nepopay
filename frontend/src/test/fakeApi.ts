@@ -5,11 +5,12 @@ export interface FakeState {
   transferBehaviour: 'ok' | 'flagged' | 'wrongPin' | 'insufficient'
   transferCalls: { key: string | null; body: Record<string, unknown> }[]
   transactions: unknown[]
+  passwordChanges: Record<string, unknown>[]
 }
 
 export function createFakeApi(overrides: Partial<FakeState> = {}) {
   const state: FakeState = {
-    loggedInAs: null, balanceKobo: 10_000_000, transferBehaviour: 'ok', transferCalls: [], transactions: [], ...overrides,
+    loggedInAs: null, balanceKobo: 10_000_000, transferBehaviour: 'ok', transferCalls: [], transactions: [], passwordChanges: [], ...overrides,
   }
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
   const ok = (data: unknown) => json(200, { success: true, data, timestamp: 't' })
@@ -46,6 +47,12 @@ export function createFakeApi(overrides: Partial<FakeState> = {}) {
     }
     if (!authed) return err(401, 'UNAUTHORIZED', 'Authentication required.')
 
+    if (path === '/users/me/password' && method === 'PATCH') {
+      state.passwordChanges.push(body)
+      return body.currentPassword === 'Passw0rdTest'
+        ? ok(null)
+        : err(422, 'INVALID_PASSWORD', 'Current password is incorrect.')
+    }
     if (path === '/accounts/me') return ok({ accountNumber: '9912345676', balanceKobo: state.balanceKobo, currency: 'NGN', status: 'ACTIVE' })
     if (path === '/notifications/unread-count') return ok({ unread: 2 })
     if (path === '/transactions' && method === 'GET') return ok(page(state.transactions))
